@@ -124,11 +124,11 @@ volumes:
   sonarr_config:
   seerr_config:
   synology:
-    name: ${SYNOLOGY_VOLUME:-Synology}
+    name: Synology
     external: true
 
 networks:
   media:
   proxy:
-    name: ${PROXY_NETWORK:-proxy}
+    name: proxy
     external: true
