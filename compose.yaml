@@ -1,115 +1,134 @@
 name: media-stack
 
-x-logging: &default-logging
-  driver: json-file
+x-default-logging: &default-logging
+  driver: local
   options:
     max-size: "10m"
     max-file: "3"
 
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  stop_grace_period: 30s
+  pids_limit: 512
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - media
+    - proxy
+  logging: *default-logging
+
+x-lsio-environment: &lsio-environment
+  PUID: "${PUID:-1000}"
+  PGID: "${PGID:-1000}"
+  TZ: "${TZ:-Australia/Perth}"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+
 services:
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
-    container_name: prowlarr
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Australia/Perth
+    <<: *service-defaults
+    image: ${PROWLARR_IMAGE:-lscr.io/linuxserver/prowlarr@sha256:45117ba8439e2337a92ffe38a451a4dafc0be771754d05d88cdf102419d09646}
+    environment: *lsio-environment
     volumes:
-      - ./data/prowlarr:/config
+      - type: volume
+        source: prowlarr_config
+        target: /config
     ports:
-      - "49152:9696"
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${PROWLARR_PORT:-49152}:9696"
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:9696/ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-    logging: *default-logging
 
   radarr:
-    image: lscr.io/linuxserver/radarr:latest
-    container_name: radarr
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Australia/Perth
+    <<: *service-defaults
+    image: ${RADARR_IMAGE:-lscr.io/linuxserver/radarr@sha256:044788f5508b7f67a3e0368cdd142c77c4d4cd5aec2efaba53e1a68b6b6231e7}
+    environment: *lsio-environment
     volumes:
-      - ./data/radarr:/config
-      - Synology:/data
+      - type: volume
+        source: radarr_config
+        target: /config
+      - type: volume
+        source: synology
+        target: /data
     ports:
-      - "49153:7878"
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${RADARR_PORT:-49153}:7878"
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:7878/ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-    logging: *default-logging
 
   jellyfin:
-    image: lscr.io/linuxserver/jellyfin:latest
-    container_name: jellyfin
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Australia/Perth
+    <<: *service-defaults
+    image: ${JELLYFIN_IMAGE:-lscr.io/linuxserver/jellyfin@sha256:b10044530553b2506f06279bf0b5223f9534f434f87a277da4b8fa8ac386cb58}
+    environment: *lsio-environment
     volumes:
-      - ./data/jellyfin:/config
-      - Synology:/data
+      - type: volume
+        source: jellyfin_config
+        target: /config
+      - type: volume
+        source: synology
+        target: /data
     ports:
-      - "8096:8096"
+      - "${JELLYFIN_BIND_ADDRESS:-0.0.0.0}:${JELLYFIN_PORT:-8096}:8096"
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:8096/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-    logging: *default-logging
 
   sonarr:
-    image: lscr.io/linuxserver/sonarr:latest
-    container_name: sonarr
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Australia/Perth
+    <<: *service-defaults
+    image: ${SONARR_IMAGE:-lscr.io/linuxserver/sonarr@sha256:339814bbf50599ac3b59077c252f29833d0138b59a062d0e82ce37bdc7f04f86}
+    environment: *lsio-environment
     volumes:
-      - ./data/sonarr:/config
-      - Synology:/data
+      - type: volume
+        source: sonarr_config
+        target: /config
+      - type: volume
+        source: synology
+        target: /data
     ports:
-      - "49154:8989"
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${SONARR_PORT:-49154}:8989"
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:8989/ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-    logging: *default-logging
 
   seerr:
-    image: ghcr.io/seerr-team/seerr:latest
-    container_name: seerr
+    <<: *service-defaults
+    image: ${SEERR_IMAGE:-ghcr.io/seerr-team/seerr@sha256:aadee014b40e28cf9aa4928bc9d1183a6eb08f8c44d543cddc9efdcb16549be2}
     init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
     environment:
-      - TZ=Australia/Perth
-      - PORT=5055
+      TZ: "${TZ:-Australia/Perth}"
+      PORT: "5055"
+      LOG_LEVEL: "${SEERR_LOG_LEVEL:-info}"
     volumes:
-      - ./config:/app/config
+      - type: volume
+        source: seerr_config
+        target: /app/config
     ports:
-      - "49155:5055"
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${SEERR_PORT:-49155}:5055"
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5055/api/v1/settings/public"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-    logging: *default-logging
 
 volumes:
-  Synology:
+  prowlarr_config:
+  radarr_config:
+  jellyfin_config:
+  sonarr_config:
+  seerr_config:
+  synology:
+    name: ${SYNOLOGY_VOLUME:-Synology}
+    external: true
+
+networks:
+  media:
+  proxy:
+    name: ${PROXY_NETWORK:-proxy}
     external: true
